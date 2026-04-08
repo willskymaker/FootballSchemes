@@ -162,6 +162,18 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
 const PITCH_W=500,PITCH_H=700,PLAYER_R=18;
 const defaultTeam=s=>({side:s,name:s==='home'?'Squadra Casa':'Squadra Ospite',bg:s==='home'?'#1a3a6b':'#8b1a1a',txt:s==='home'?'#c0d8f0':'#f0c0c0',brd:s==='home'?'#4a7fb5':'#b54a4a',players:[],nextId:s==='home'?1:200});
 const state={teams:{home:defaultTeam('home'),away:defaultTeam('away')},activeTeam:'home',lines:[],nextLineId:1,selectedPlayer:null,selectedLine:null,lineDrawStart:null,currentLineType:'pass',dragging:null,dragOffset:{x:0,y:0},_dragMoved:false};
+
+// --- DOM cache ---
+const $={};
+function initCache(){
+  ['pitchContainer','linesSvg','pitchCanvas','pitchTitle','playerList','lineList',
+   'playerCount','addPlayerBtn','playerProps','lineProps','drawBanner','toast',
+   'mainArea','schemaTitle','tabHome','tabAway','dotHome','dotAway',
+   'teamBg','teamTxt','teamBrd','teamName','colorPanelLabel',
+   'editPlayerNum','editLineType','editLineColor','lineColor','newPlayerNum','backdrop','sidebar'
+  ].forEach(id=>$[id]=document.getElementById(id));
+}
+
 function T(){return state.teams[state.activeTeam]}
 function allPlayers(){return[...state.teams.home.players,...state.teams.away.players]}
 function findPlayer(id){return allPlayers().find(p=>p.id===id)}
@@ -169,15 +181,25 @@ function findPlayerTeam(id){if(state.teams.home.players.find(p=>p.id===id))retur
 
 const F={'4-4-2':[{n:1,x:.5,y:.92},{n:2,x:.85,y:.78},{n:5,x:.65,y:.8},{n:6,x:.35,y:.8},{n:3,x:.15,y:.78},{n:7,x:.85,y:.55},{n:8,x:.62,y:.58},{n:4,x:.38,y:.58},{n:11,x:.15,y:.55},{n:9,x:.6,y:.32},{n:10,x:.4,y:.32}],'4-3-3':[{n:1,x:.5,y:.92},{n:2,x:.85,y:.78},{n:5,x:.65,y:.8},{n:6,x:.35,y:.8},{n:3,x:.15,y:.78},{n:8,x:.65,y:.55},{n:4,x:.5,y:.6},{n:10,x:.35,y:.55},{n:7,x:.82,y:.32},{n:9,x:.5,y:.28},{n:11,x:.18,y:.32}],'3-5-2':[{n:1,x:.5,y:.92},{n:2,x:.72,y:.78},{n:5,x:.5,y:.8},{n:3,x:.28,y:.78},{n:7,x:.88,y:.58},{n:8,x:.65,y:.55},{n:4,x:.5,y:.6},{n:10,x:.35,y:.55},{n:11,x:.12,y:.58},{n:9,x:.6,y:.3},{n:6,x:.4,y:.3}],'4-2-3-1':[{n:1,x:.5,y:.92},{n:2,x:.85,y:.78},{n:5,x:.65,y:.8},{n:6,x:.35,y:.8},{n:3,x:.15,y:.78},{n:4,x:.6,y:.62},{n:8,x:.4,y:.62},{n:7,x:.82,y:.42},{n:10,x:.5,y:.4},{n:11,x:.18,y:.42},{n:9,x:.5,y:.24}],'4-3-1-2':[{n:1,x:.5,y:.92},{n:2,x:.85,y:.78},{n:5,x:.65,y:.8},{n:6,x:.35,y:.8},{n:3,x:.15,y:.78},{n:8,x:.65,y:.58},{n:4,x:.5,y:.62},{n:14,x:.35,y:.58},{n:10,x:.5,y:.42},{n:9,x:.6,y:.26},{n:11,x:.4,y:.26}],'3-4-3':[{n:1,x:.5,y:.92},{n:2,x:.72,y:.78},{n:5,x:.5,y:.8},{n:3,x:.28,y:.78},{n:7,x:.85,y:.55},{n:8,x:.62,y:.58},{n:4,x:.38,y:.58},{n:11,x:.15,y:.55},{n:9,x:.5,y:.28},{n:10,x:.25,y:.34},{n:6,x:.75,y:.34}]};
 
-window.addEventListener('load',()=>{sizePitch();drawPitchMarkings();switchTeam('home');renderAll();window.addEventListener('resize',()=>{sizePitch();drawPitchMarkings();renderAll()})});
+// --- Init ---
+let _resizeTimer;
+window.addEventListener('load',()=>{
+  initCache();
+  sizePitch();drawPitchMarkings();switchTeam('home');renderAll();
+  $.pitchContainer.addEventListener('click',onPitchClick);
+  window.addEventListener('resize',()=>{
+    clearTimeout(_resizeTimer);
+    _resizeTimer=setTimeout(()=>{sizePitch();drawPitchMarkings();renderAll();},150);
+  });
+});
 
-function sizePitch(){const m=document.getElementById('mainArea'),pad=24,aW=m.clientWidth-pad*2,aH=m.clientHeight-pad*2,ratio=PITCH_W/PITCH_H;let w,h;if(aW/aH>ratio){h=aH;w=h*ratio}else{w=aW;h=w/ratio}const c=document.getElementById('pitchContainer');c.style.width=w+'px';c.style.height=h+'px';const cv=document.getElementById('pitchCanvas');cv.width=w*2;cv.height=h*2;cv.style.width=w+'px';cv.style.height=h+'px'}
-function getPitchSize(){const c=document.getElementById('pitchContainer');return{w:c.clientWidth,h:c.clientHeight}}
+function sizePitch(){const m=$.mainArea,pad=24,aW=m.clientWidth-pad*2,aH=m.clientHeight-pad*2,ratio=PITCH_W/PITCH_H;let w,h;if(aW/aH>ratio){h=aH;w=h*ratio}else{w=aW;h=w/ratio}const c=$.pitchContainer;c.style.width=w+'px';c.style.height=h+'px';const cv=$.pitchCanvas;cv.width=w*2;cv.height=h*2;cv.style.width=w+'px';cv.style.height=h+'px'}
+function getPitchSize(){return{w:$.pitchContainer.clientWidth,h:$.pitchContainer.clientHeight}}
 function toPixel(nx,ny){const s=getPitchSize();return{x:nx*s.w,y:ny*s.h}}
 function toNorm(px,py){const s=getPitchSize();return{x:px/s.w,y:py/s.h}}
 
 function drawPitchMarkings(){
-  const cv=document.getElementById('pitchCanvas'),ctx=cv.getContext('2d'),w=cv.width,h=cv.height;
+  const cv=$.pitchCanvas,ctx=cv.getContext('2d'),w=cv.width,h=cv.height;
   ctx.clearRect(0,0,w,h);
   for(let i=0;i<12;i++){ctx.fillStyle=i%2===0?'#1a7a3a':'#1d8840';ctx.fillRect(0,i*h/12,w,h/12)}
   ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=2.5;
@@ -187,7 +209,6 @@ function drawPitchMarkings(){
   ctx.beginPath();ctx.arc(lx+pw/2,ly+ph/2,pw*.12,0,Math.PI*2);ctx.stroke();
   ctx.beginPath();ctx.arc(lx+pw/2,ly+ph/2,3,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.45)';ctx.fill();
   const paW=pw*.56,paH=ph*.18,gaW=pw*.3,gaH=ph*.065;
-  // top
   ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=2.5;
   ctx.strokeRect(lx+(pw-paW)/2,ly,paW,paH);ctx.strokeRect(lx+(pw-gaW)/2,ly,gaW,gaH);
   ctx.beginPath();ctx.arc(lx+pw/2,ly+ph*.145,3,0,Math.PI*2);ctx.fill();
@@ -195,7 +216,6 @@ function drawPitchMarkings(){
   ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=3;
   const goalW=pw*.18,goalH=ph*.018;
   ctx.strokeRect(lx+(pw-goalW)/2,ly-goalH,goalW,goalH);
-  // bottom
   ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=2.5;
   ctx.strokeRect(lx+(pw-paW)/2,ly+ph-paH,paW,paH);ctx.strokeRect(lx+(pw-gaW)/2,ly+ph-gaH,gaW,gaH);
   ctx.beginPath();ctx.arc(lx+pw/2,ly+ph-ph*.145,3,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.45)';ctx.fill();
@@ -206,23 +226,19 @@ function drawPitchMarkings(){
 
 function switchTeam(side){
   state.activeTeam=side;state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;
-  document.getElementById('playerProps').classList.remove('visible');
-  document.getElementById('lineProps').classList.remove('visible');hideBanner();
-  document.getElementById('tabHome').className='team-tab'+(side==='home'?' active-home':'');
-  document.getElementById('tabAway').className='team-tab'+(side==='away'?' active-away':'');
+  $.playerProps.classList.remove('visible');$.lineProps.classList.remove('visible');hideBanner();
+  $.tabHome.className='team-tab'+(side==='home'?' active-home':'');
+  $.tabAway.className='team-tab'+(side==='away'?' active-away':'');
   const t=T();
-  document.getElementById('teamBg').value=t.bg;document.getElementById('teamTxt').value=t.txt;
-  document.getElementById('teamBrd').value=t.brd;document.getElementById('teamName').value=t.name;
-  document.getElementById('colorPanelLabel').textContent=side==='home'?'Colori Casa':'Colori Ospite';
-  document.getElementById('dotHome').style.background=state.teams.home.brd;
-  document.getElementById('dotAway').style.background=state.teams.away.brd;
+  $.teamBg.value=t.bg;$.teamTxt.value=t.txt;$.teamBrd.value=t.brd;$.teamName.value=t.name;
+  $.colorPanelLabel.textContent=side==='home'?'Colori Casa':'Colori Ospite';
+  $.dotHome.style.background=state.teams.home.brd;$.dotAway.style.background=state.teams.away.brd;
   updatePlayerCount();renderAll();
 }
 
 function onTeamColorChange(){
-  const t=T();t.bg=document.getElementById('teamBg').value;t.txt=document.getElementById('teamTxt').value;
-  t.brd=document.getElementById('teamBrd').value;t.name=document.getElementById('teamName').value;
-  document.getElementById('dot'+(state.activeTeam==='home'?'Home':'Away')).style.background=t.brd;renderAll();
+  const t=T();t.bg=$.teamBg.value;t.txt=$.teamTxt.value;t.brd=$.teamBrd.value;t.name=$.teamName.value;
+  $['dot'+(state.activeTeam==='home'?'Home':'Away')].style.background=t.brd;renderAll();
 }
 
 function applyFormation(name){
@@ -239,69 +255,109 @@ function clearTeamPlayers(){
   const t=T(),ids=new Set(t.players.map(p=>p.id));
   state.lines=state.lines.filter(l=>!ids.has(l.from)&&!ids.has(l.to));
   t.players=[];state.selectedPlayer=null;
-  document.getElementById('playerProps').classList.remove('visible');
+  $.playerProps.classList.remove('visible');
   updatePlayerCount();renderAll();
 }
 
-function addPlayer(){const t=T();if(t.players.length>=22)return;const num=parseInt(document.getElementById('newPlayerNum').value)||1;const id=t.nextId++;t.players.push({id,num,x:.5,y:.5,team:state.activeTeam});updatePlayerCount();renderAll()}
-function updatePlayerCount(){const t=T();document.getElementById('playerCount').textContent=t.players.length;document.getElementById('addPlayerBtn').disabled=t.players.length>=22}
+function addPlayer(){const t=T();if(t.players.length>=22)return;const num=parseInt($.newPlayerNum.value)||1;const id=t.nextId++;t.players.push({id,num,x:.5,y:.5,team:state.activeTeam});updatePlayerCount();renderAll()}
+function updatePlayerCount(){const t=T();$.playerCount.textContent=t.players.length;$.addPlayerBtn.disabled=t.players.length>=22}
 
 function selectPlayer(id){
   if(state.lineDrawStart!==null&&state.lineDrawStart!==id){createLine(state.lineDrawStart,id,null);state.lineDrawStart=null;hideBanner();renderAll();return}
   state.selectedPlayer=id;state.selectedLine=null;
-  const p=findPlayer(id);if(p){document.getElementById('editPlayerNum').value=p.num;document.getElementById('playerProps').classList.add('visible')}
-  document.getElementById('lineProps').classList.remove('visible');renderAll();
+  const p=findPlayer(id);if(p){$.editPlayerNum.value=p.num;$.playerProps.classList.add('visible')}
+  $.lineProps.classList.remove('visible');renderAll();
 }
 
-function updateSelectedPlayerNum(){const p=findPlayer(state.selectedPlayer);if(p){p.num=parseInt(document.getElementById('editPlayerNum').value)||1;renderAll()}}
-function deletePlayer(id){['home','away'].forEach(s=>{state.teams[s].players=state.teams[s].players.filter(p=>p.id!==id)});state.lines=state.lines.filter(l=>l.from!==id&&l.to!==id);if(state.selectedPlayer===id){state.selectedPlayer=null;document.getElementById('playerProps').classList.remove('visible')}updatePlayerCount();renderAll()}
+function updateSelectedPlayerNum(){const p=findPlayer(state.selectedPlayer);if(p){p.num=parseInt($.editPlayerNum.value)||1;renderAll()}}
+function deletePlayer(id){['home','away'].forEach(s=>{state.teams[s].players=state.teams[s].players.filter(p=>p.id!==id)});state.lines=state.lines.filter(l=>l.from!==id&&l.to!==id);if(state.selectedPlayer===id){state.selectedPlayer=null;$.playerProps.classList.remove('visible')}updatePlayerCount();renderAll()}
 
 function setLineType(type){state.currentLineType=type;document.querySelectorAll('.line-style-btn').forEach(b=>b.classList.toggle('active',b.dataset.type===type))}
-function createLine(fromId,toId,toPoint){const color=document.getElementById('lineColor').value;const id=state.nextLineId++;state.lines.push({id,from:fromId,to:toId,toPoint,type:state.currentLineType,color});renderAll()}
-function selectLine(id){state.selectedLine=id;state.selectedPlayer=null;const l=state.lines.find(l=>l.id===id);if(l){document.getElementById('editLineType').value=l.type;document.getElementById('editLineColor').value=l.color;document.getElementById('lineProps').classList.add('visible')}document.getElementById('playerProps').classList.remove('visible');renderAll()}
-function updateSelectedLineType(){const l=state.lines.find(l=>l.id===state.selectedLine);if(l){l.type=document.getElementById('editLineType').value;renderAll()}}
-function updateSelectedLineColor(){const l=state.lines.find(l=>l.id===state.selectedLine);if(l){l.color=document.getElementById('editLineColor').value;renderAll()}}
-function deleteSelectedLine(){state.lines=state.lines.filter(l=>l.id!==state.selectedLine);state.selectedLine=null;document.getElementById('lineProps').classList.remove('visible');renderAll()}
+function createLine(fromId,toId,toPoint){const color=$.lineColor.value;const id=state.nextLineId++;state.lines.push({id,from:fromId,to:toId,toPoint,type:state.currentLineType,color});renderAll()}
+function selectLine(id){state.selectedLine=id;state.selectedPlayer=null;const l=state.lines.find(l=>l.id===id);if(l){$.editLineType.value=l.type;$.editLineColor.value=l.color;$.lineProps.classList.add('visible')}$.playerProps.classList.remove('visible');renderAll()}
+function updateSelectedLineType(){const l=state.lines.find(l=>l.id===state.selectedLine);if(l){l.type=$.editLineType.value;renderAll()}}
+function updateSelectedLineColor(){const l=state.lines.find(l=>l.id===state.selectedLine);if(l){l.color=$.editLineColor.value;renderAll()}}
+function deleteSelectedLine(){state.lines=state.lines.filter(l=>l.id!==state.selectedLine);state.selectedLine=null;$.lineProps.classList.remove('visible');renderAll()}
 
-document.getElementById('pitchContainer').addEventListener('click',function(e){
+function onPitchClick(e){
   if(e.target.closest('.player'))return;
-  if(state.lineDrawStart!==null){const r=this.getBoundingClientRect();const norm=toNorm(e.clientX-r.left,e.clientY-r.top);createLine(state.lineDrawStart,null,norm);state.lineDrawStart=null;hideBanner();renderAll();return}
+  if(state.lineDrawStart!==null){const r=$.pitchContainer.getBoundingClientRect();const norm=toNorm(e.clientX-r.left,e.clientY-r.top);createLine(state.lineDrawStart,null,norm);state.lineDrawStart=null;hideBanner();renderAll();return}
   state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;
-  document.getElementById('playerProps').classList.remove('visible');document.getElementById('lineProps').classList.remove('visible');hideBanner();renderAll();
-});
+  $.playerProps.classList.remove('visible');$.lineProps.classList.remove('visible');hideBanner();renderAll();
+}
 
 function onPlayerPointerDown(e,id){e.preventDefault();e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();const cx=e.touches?e.touches[0].clientX:e.clientX;const cy=e.touches?e.touches[0].clientY:e.clientY;state.dragging=id;state.dragOffset={x:cx-r.left-r.width/2,y:cy-r.top-r.height/2};state._dragMoved=false;state._dragStartX=cx;state._dragStartY=cy;selectPlayer(id)}
 
-document.addEventListener('pointermove',e=>{if(state.dragging===null)return;e.preventDefault();const dx=e.clientX-state._dragStartX,dy=e.clientY-state._dragStartY;if(Math.abs(dx)>3||Math.abs(dy)>3)state._dragMoved=true;if(!state._dragMoved)return;const c=document.getElementById('pitchContainer'),cr=c.getBoundingClientRect();let px=Math.max(PLAYER_R,Math.min(cr.width-PLAYER_R,e.clientX-cr.left));let py=Math.max(PLAYER_R,Math.min(cr.height-PLAYER_R,e.clientY-cr.top));const p=findPlayer(state.dragging);if(p){const n=toNorm(px,py);p.x=n.x;p.y=n.y;renderAll()}});
-document.addEventListener('pointerup',()=>{state.dragging=null});
+// --- RAF-throttled drag: aggiorna solo il giocatore mosso + linee SVG ---
+let _dragRafId=null,_lastDragE=null;
+document.addEventListener('pointermove',e=>{
+  if(state.dragging===null)return;
+  e.preventDefault();
+  _lastDragE=e;
+  if(_dragRafId)return;
+  _dragRafId=requestAnimationFrame(()=>{
+    _dragRafId=null;
+    const ev=_lastDragE;
+    const dx=ev.clientX-state._dragStartX,dy=ev.clientY-state._dragStartY;
+    if(Math.abs(dx)>3||Math.abs(dy)>3)state._dragMoved=true;
+    if(!state._dragMoved)return;
+    const cr=$.pitchContainer.getBoundingClientRect();
+    const px=Math.max(PLAYER_R,Math.min(cr.width-PLAYER_R,ev.clientX-cr.left));
+    const py=Math.max(PLAYER_R,Math.min(cr.height-PLAYER_R,ev.clientY-cr.top));
+    const p=findPlayer(state.dragging);
+    if(p){
+      const n=toNorm(px,py);p.x=n.x;p.y=n.y;
+      const el=$.pitchContainer.querySelector(`.player[data-id="${state.dragging}"]`);
+      if(el){el.style.left=(px-PLAYER_R)+'px';el.style.top=(py-PLAYER_R)+'px';}
+      renderLines();
+    }
+  });
+},{passive:false});
+document.addEventListener('pointerup',()=>{state.dragging=null;_lastDragE=null});
 
 function onPlayerDblClick(e,id){e.preventDefault();e.stopPropagation();state.lineDrawStart=id;showBanner()}
-function showBanner(){document.getElementById('drawBanner').classList.add('show')}
-function hideBanner(){document.getElementById('drawBanner').classList.remove('show')}
+function showBanner(){$.drawBanner.classList.add('show')}
+function hideBanner(){$.drawBanner.classList.remove('show')}
 
-function renderAll(){renderPlayers();renderLines();renderPlayerList();renderLineList()}
+// --- Render split: pitch (campo+linee) vs UI (liste sidebar) ---
+function renderPitch(){renderPlayers();renderLines()}
+function renderUI(){renderPlayerList();renderLineList()}
+function renderAll(){renderPitch();renderUI()}
 
+// --- Keyed player render: riusa elementi DOM esistenti ---
 function renderPlayers(){
-  document.querySelectorAll('.player').forEach(el=>el.remove());
-  const container=document.getElementById('pitchContainer');
+  const container=$.pitchContainer;
+  const existing=new Map();
+  container.querySelectorAll('.player').forEach(el=>existing.set(+el.dataset.id,el));
   allPlayers().forEach(p=>{
     const team=findPlayerTeam(p.id);if(!team)return;
     const pos=toPixel(p.x,p.y);
-    const div=document.createElement('div');
-    let cls='player';if(state.selectedPlayer===p.id)cls+=' selected';if(state.lineDrawStart===p.id)cls+=' line-start';
+    let div=existing.get(p.id);
+    if(div){existing.delete(p.id)}
+    else{
+      div=document.createElement('div');
+      div.dataset.id=p.id;
+      div.innerHTML='<span class="number"></span>';
+      div.style.width=(PLAYER_R*2)+'px';div.style.height=(PLAYER_R*2)+'px';
+      div.style.touchAction='none';
+      div.addEventListener('pointerdown',e=>onPlayerPointerDown(e,p.id));
+      div.addEventListener('dblclick',e=>onPlayerDblClick(e,p.id));
+      container.appendChild(div);
+    }
+    let cls='player';
+    if(state.selectedPlayer===p.id)cls+=' selected';
+    if(state.lineDrawStart===p.id)cls+=' line-start';
     div.className=cls;
     div.style.left=(pos.x-PLAYER_R)+'px';div.style.top=(pos.y-PLAYER_R)+'px';
-    div.style.width=(PLAYER_R*2)+'px';div.style.height=(PLAYER_R*2)+'px';
     div.style.backgroundColor=team.bg;div.style.color=team.txt;div.style.borderColor=team.brd;
-    div.innerHTML=`<span class="number">${p.num}</span>`;
-    div.addEventListener('pointerdown',e=>onPlayerPointerDown(e,p.id));
-    div.addEventListener('dblclick',e=>onPlayerDblClick(e,p.id));
-    div.style.touchAction='none';container.appendChild(div);
+    div.querySelector('.number').textContent=p.num;
   });
+  existing.forEach(el=>el.remove());
 }
 
 function renderLines(){
-  const svg=document.getElementById('linesSvg'),defs=svg.querySelector('defs');
+  const svg=$.linesSvg;
+  const defs=svg.querySelector('defs')||svg.appendChild(document.createElementNS('http://www.w3.org/2000/svg','defs'));
   svg.innerHTML='';svg.appendChild(defs);defs.innerHTML='';
   state.lines.forEach(l=>{
     const fromP=findPlayer(l.from);if(!fromP)return;
@@ -333,7 +389,7 @@ function renderLines(){
 }
 
 function renderPlayerList(){
-  const list=document.getElementById('playerList');list.innerHTML='';
+  const list=$.playerList;list.innerHTML='';
   T().players.forEach(p=>{
     const row=document.createElement('div');
     row.className='item-row'+(state.selectedPlayer===p.id?' selected':'');
@@ -345,32 +401,32 @@ function renderPlayerList(){
 }
 
 function renderLineList(){
-  const list=document.getElementById('lineList');list.innerHTML='';
+  const list=$.lineList;list.innerHTML='';
   state.lines.forEach(l=>{
     const fP=findPlayer(l.from),tP=l.to!==null?findPlayer(l.to):null;
     const row=document.createElement('div');
     row.className='item-row'+(state.selectedLine===l.id?' selected':'');
     row.innerHTML=`<div class="dot" style="background:${l.color}"></div><div class="info">${fP?'#'+fP.num:'?'} ${l.type==='pass'?'⋯→':'—→'} ${tP?'#'+tP.num:'punto'}</div><button class="del-btn">×</button>`;
     row.querySelector('.info').addEventListener('click',()=>selectLine(l.id));
-    row.querySelector('.del-btn').addEventListener('click',e=>{e.stopPropagation();state.lines=state.lines.filter(x=>x.id!==l.id);if(state.selectedLine===l.id){state.selectedLine=null;document.getElementById('lineProps').classList.remove('visible')}renderAll()});
+    row.querySelector('.del-btn').addEventListener('click',e=>{e.stopPropagation();state.lines=state.lines.filter(x=>x.id!==l.id);if(state.selectedLine===l.id){state.selectedLine=null;$.lineProps.classList.remove('visible')}renderAll()});
     list.appendChild(row);
   });
 }
 
-function updateTitle(){document.getElementById('pitchTitle').textContent=document.getElementById('schemaTitle').value.toUpperCase()}
+function updateTitle(){$.pitchTitle.textContent=$.schemaTitle.value.toUpperCase()}
 
-async function exportJPG(){showToast('Generazione JPG...');try{const c=await html2canvas(document.getElementById('pitchContainer'),{backgroundColor:'#1a7a3a',scale:3,useCORS:true,logging:false});const a=document.createElement('a');a.download='schema-tattico.jpg';a.href=c.toDataURL('image/jpeg',.95);a.click();showToast('JPG scaricato!')}catch(e){showToast('Errore: '+e.message)}}
+async function exportJPG(){showToast('Generazione JPG...');try{const c=await html2canvas($.pitchContainer,{backgroundColor:'#1a7a3a',scale:3,useCORS:true,logging:false});const a=document.createElement('a');a.download='schema-tattico.jpg';a.href=c.toDataURL('image/jpeg',.95);a.click();showToast('JPG scaricato!')}catch(e){showToast('Errore: '+e.message)}}
 
-async function exportPDF(){showToast('Generazione PDF...');try{const c=await html2canvas(document.getElementById('pitchContainer'),{backgroundColor:'#1a7a3a',scale:3,useCORS:true,logging:false});const img=c.toDataURL('image/jpeg',.95);const{jsPDF}=window.jspdf;const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});const pW=210,mg=15,aW=pW-mg*2,ratio=c.height/c.width,iW=aW,iH=iW*ratio;pdf.setFont('helvetica','bold');pdf.setFontSize(16);pdf.text(document.getElementById('schemaTitle').value,pW/2,mg+5,{align:'center'});pdf.addImage(img,'JPEG',mg,mg+12,iW,iH);const ly=mg+12+iH+8;pdf.setFontSize(9);pdf.setFont('helvetica','normal');pdf.setDrawColor(247,74,111);pdf.setLineWidth(.8);pdf.line(mg,ly,mg+15,ly);pdf.text('Movimento senza palla',mg+18,ly+1);pdf.setDrawColor(200,200,200);pdf.setLineDashPattern([2,2],0);pdf.line(mg+80,ly,mg+95,ly);pdf.setLineDashPattern([],0);pdf.text('Passaggio',mg+98,ly+1);const ly2=ly+8;pdf.setFontSize(8);pdf.setTextColor(70,127,181);pdf.text(state.teams.home.name,mg,ly2);pdf.setTextColor(181,74,74);pdf.text('vs  '+state.teams.away.name,mg+60,ly2);pdf.save('schema-tattico.pdf');showToast('PDF scaricato!')}catch(e){showToast('Errore: '+e.message)}}
+async function exportPDF(){showToast('Generazione PDF...');try{const c=await html2canvas($.pitchContainer,{backgroundColor:'#1a7a3a',scale:3,useCORS:true,logging:false});const img=c.toDataURL('image/jpeg',.95);const{jsPDF}=window.jspdf;const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});const pW=210,mg=15,aW=pW-mg*2,ratio=c.height/c.width,iW=aW,iH=iW*ratio;pdf.setFont('helvetica','bold');pdf.setFontSize(16);pdf.text($.schemaTitle.value,pW/2,mg+5,{align:'center'});pdf.addImage(img,'JPEG',mg,mg+12,iW,iH);const ly=mg+12+iH+8;pdf.setFontSize(9);pdf.setFont('helvetica','normal');pdf.setDrawColor(247,74,111);pdf.setLineWidth(.8);pdf.line(mg,ly,mg+15,ly);pdf.text('Movimento senza palla',mg+18,ly+1);pdf.setDrawColor(200,200,200);pdf.setLineDashPattern([2,2],0);pdf.line(mg+80,ly,mg+95,ly);pdf.setLineDashPattern([],0);pdf.text('Passaggio',mg+98,ly+1);const ly2=ly+8;pdf.setFontSize(8);pdf.setTextColor(70,127,181);pdf.text(state.teams.home.name,mg,ly2);pdf.setTextColor(181,74,74);pdf.text('vs  '+state.teams.away.name,mg+60,ly2);pdf.save('schema-tattico.pdf');showToast('PDF scaricato!')}catch(e){showToast('Errore: '+e.message)}}
 
-function saveSchema(){const data={title:document.getElementById('schemaTitle').value,teams:state.teams,lines:state.lines};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.download='schema-tattico.json';a.href=URL.createObjectURL(blob);a.click();showToast('Schema salvato!')}
+function saveSchema(){const data={title:$.schemaTitle.value,teams:state.teams,lines:state.lines};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.download='schema-tattico.json';a.href=URL.createObjectURL(blob);a.click();showToast('Schema salvato!')}
 
-function loadSchema(event){const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const d=JSON.parse(e.target.result);document.getElementById('schemaTitle').value=d.title||'';updateTitle();state.teams=d.teams||{home:defaultTeam('home'),away:defaultTeam('away')};state.lines=d.lines||[];['home','away'].forEach(s=>{state.teams[s].nextId=Math.max(...state.teams[s].players.map(p=>p.id),0)+1});state.nextLineId=Math.max(...state.lines.map(l=>l.id),0)+1;state.selectedPlayer=null;state.selectedLine=null;switchTeam('home');showToast('Schema caricato!')}catch(err){showToast('Errore nel file')}};reader.readAsText(file);event.target.value=''}
+function loadSchema(event){const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const d=JSON.parse(e.target.result);$.schemaTitle.value=d.title||'';updateTitle();state.teams=d.teams||{home:defaultTeam('home'),away:defaultTeam('away')};state.lines=d.lines||[];['home','away'].forEach(s=>{state.teams[s].nextId=Math.max(...state.teams[s].players.map(p=>p.id),0)+1});state.nextLineId=Math.max(...state.lines.map(l=>l.id),0)+1;state.selectedPlayer=null;state.selectedLine=null;switchTeam('home');showToast('Schema caricato!')}catch(err){showToast('Errore nel file')}};reader.readAsText(file);event.target.value=''}
 
-function resetAll(){if(!confirm('Resettare tutto?'))return;state.teams={home:defaultTeam('home'),away:defaultTeam('away')};state.lines=[];state.nextLineId=1;state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;document.getElementById('schemaTitle').value='Schema tattico';updateTitle();switchTeam('home');renderAll();showToast('Reset completato')}
+function resetAll(){if(!confirm('Resettare tutto?'))return;state.teams={home:defaultTeam('home'),away:defaultTeam('away')};state.lines=[];state.nextLineId=1;state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;$.schemaTitle.value='Schema tattico';updateTitle();switchTeam('home');renderAll();showToast('Reset completato')}
 
-function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
-function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('backdrop').classList.toggle('show')}
+function showToast(msg){$.toast.textContent=msg;$.toast.classList.add('show');setTimeout(()=>$.toast.classList.remove('show'),2200)}
+function toggleSidebar(){$.sidebar.classList.toggle('open');$.backdrop.classList.toggle('show')}
 </script>
 </body>
 </html>
