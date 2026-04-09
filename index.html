@@ -170,6 +170,14 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
     <div class="btn-group"><button class="btn btn-blue btn-sm" onclick="exportJPG()">📷 JPG</button><button class="btn btn-blue btn-sm" onclick="exportPDF()">📄 PDF</button></div>
   </div>
   <div class="panel">
+    <div class="panel-title">Campo</div>
+    <div class="btn-group">
+      <button class="btn btn-outline btn-sm" style="flex:1" onclick="document.getElementById('bgFile').click()">🖼 Sfondo</button>
+      <button class="btn btn-outline btn-sm" id="bgResetBtn" onclick="resetBg()" style="display:none">✕ Rimuovi</button>
+      <input type="file" id="bgFile" accept="image/*" style="display:none" onchange="loadBg(event)">
+    </div>
+  </div>
+  <div class="panel">
     <div class="panel-title">Salva / Carica</div>
     <div class="btn-group">
       <button class="btn btn-outline btn-sm" onclick="saveSchema()">💾 Salva</button>
@@ -224,7 +232,7 @@ function initCache(){
    'mainArea','schemaTitle','tabHome','tabAway','dotHome','dotAway',
    'teamBg','teamTxt','teamBrd','teamName','colorPanelLabel',
    'editPlayerNum','editLineType','editLineColor','lineColor','newPlayerNum','linePopover','arrowPopover',
-   'popTypePass','popTypeRun','popLineColor','ballBtn','coachName','backdrop','sidebar'
+   'popTypePass','popTypeRun','popLineColor','ballBtn','coachName','bgResetBtn','backdrop','sidebar'
   ].forEach(id=>$[id]=document.getElementById(id));
 }
 
@@ -710,6 +718,25 @@ function saveSchema(){const data={title:$.schemaTitle.value,coach:$.coachName.va
 function loadSchema(event){const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const d=JSON.parse(e.target.result);$.schemaTitle.value=d.title||'';$.coachName.value=d.coach||'';updateTitle();state.teams=d.teams||{home:defaultTeam('home'),away:defaultTeam('away')};state.lines=(d.lines||[]).map(l=>({...l,cp:l.cp||null}));['home','away'].forEach(s=>{state.teams[s].nextId=Math.max(...state.teams[s].players.map(p=>p.id),0)+1});state.nextLineId=Math.max(...state.lines.map(l=>l.id),0)+1;state.ball=d.ball||null;$.ballBtn.classList.toggle('active',!!state.ball);state.selectedPlayer=null;state.selectedLine=null;switchTeam('home');showToast('Schema caricato!')}catch(err){showToast('Errore nel file')}};reader.readAsText(file);event.target.value=''}
 
 function resetAll(){if(!confirm('Resettare tutto?'))return;state.teams={home:defaultTeam('home'),away:defaultTeam('away')};state.lines=[];state.nextLineId=1;state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;state.draggingLineCp=null;state.draggingLineEnd=null;state.ball=null;$.ballBtn.classList.remove('active');$.schemaTitle.value='Schema tattico';$.coachName.value='';updateTitle();switchTeam('home');renderAll();showToast('Reset completato')}
+
+function loadBg(event){
+  const file=event.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    $.pitchCanvas.style.display='none';
+    $.pitchContainer.style.backgroundImage=`url(${e.target.result})`;
+    $.pitchContainer.style.backgroundSize='100% 100%';
+    $.bgResetBtn.style.display='';
+  };
+  reader.readAsDataURL(file);
+  event.target.value='';
+}
+function resetBg(){
+  $.pitchContainer.style.backgroundImage='';
+  $.pitchCanvas.style.display='';
+  $.bgResetBtn.style.display='none';
+  drawPitchMarkings();
+}
 
 function showToast(msg){$.toast.textContent=msg;$.toast.classList.add('show');setTimeout(()=>$.toast.classList.remove('show'),2200)}
 function toggleSidebar(){$.sidebar.classList.toggle('open');$.backdrop.classList.toggle('show')}
