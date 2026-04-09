@@ -76,6 +76,15 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
 .line-popover .pop-label{font-family:'Barlow Condensed',sans-serif;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-dim);padding:2px 6px 4px;}
 .line-popover button{padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;cursor:pointer;text-align:left;transition:all .12s;}
 .line-popover button:hover{border-color:var(--accent);color:var(--accent);background:rgba(247,74,111,.08);}
+.pop-type-row{display:flex;gap:3px;}
+.pop-type-btn{flex:1;padding:5px 6px!important;font-size:.7rem!important;}
+.pop-type-btn.active{border-color:var(--accent)!important;color:var(--accent)!important;background:rgba(247,74,111,.12)!important;}
+.pop-color-row{display:flex;align-items:center;gap:7px;padding:3px 6px;}
+.pop-color-row span{font-size:.68rem;color:var(--text-dim);font-family:'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:1px;flex:1}
+.pop-move-btn{background:rgba(74,159,245,.1)!important;border-color:#4a9ff5!important;color:#4a9ff5!important;}
+.pop-move-btn:hover{background:rgba(74,159,245,.2)!important;}
+.pop-del-btn{background:rgba(127,29,29,.4)!important;border-color:#b54a4a!important;color:#fca5a5!important;}
+.pop-del-btn:hover{background:rgba(153,27,27,.6)!important;}
 </style>
 </head>
 <body>
@@ -164,6 +173,19 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
       <button onclick="startLine('pass')">⋯→ Passaggio</button>
       <button onclick="startLine('run')">—→ Movimento</button>
     </div>
+    <div class="line-popover" id="arrowPopover">
+      <div class="pop-label">Modifica linea</div>
+      <div class="pop-type-row">
+        <button class="pop-type-btn" id="popTypePass" onclick="setPopLineType('pass')">⋯→ Pass.</button>
+        <button class="pop-type-btn" id="popTypeRun" onclick="setPopLineType('run')">—→ Mov.</button>
+      </div>
+      <div class="pop-color-row">
+        <span>Colore</span>
+        <input type="color" id="popLineColor" oninput="setPopLineColor()" style="width:28px;height:24px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:transparent;padding:1px">
+      </div>
+      <button class="pop-move-btn" onclick="relocateLine()">↗ Sposta destinazione</button>
+      <button class="pop-del-btn" onclick="deleteLineFromPopover()">✕ Elimina</button>
+    </div>
   </div>
 </div>
 </div>
@@ -180,7 +202,8 @@ function initCache(){
    'playerCount','addPlayerBtn','playerProps','lineProps','drawBanner','toast',
    'mainArea','schemaTitle','tabHome','tabAway','dotHome','dotAway',
    'teamBg','teamTxt','teamBrd','teamName','colorPanelLabel',
-   'editPlayerNum','editLineType','editLineColor','lineColor','newPlayerNum','linePopover','backdrop','sidebar'
+   'editPlayerNum','editLineType','editLineColor','lineColor','newPlayerNum','linePopover','arrowPopover',
+   'popTypePass','popTypeRun','popLineColor','backdrop','sidebar'
   ].forEach(id=>$[id]=document.getElementById(id));
 }
 
@@ -236,7 +259,7 @@ function drawPitchMarkings(){
 
 function switchTeam(side){
   state.activeTeam=side;state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;
-  $.playerProps.classList.remove('visible');$.lineProps.classList.remove('visible');hideBanner();hideLinePopover();
+  $.playerProps.classList.remove('visible');$.lineProps.classList.remove('visible');hideBanner();hideLinePopover();hideArrowPopover();
   $.tabHome.className='team-tab'+(side==='home'?' active-home':'');
   $.tabAway.className='team-tab'+(side==='away'?' active-away':'');
   const t=T();
@@ -274,7 +297,7 @@ function updatePlayerCount(){const t=T();$.playerCount.textContent=t.players.len
 
 function selectPlayer(id){
   if(state.lineDrawStart!==null&&state.lineDrawStart!==id){createLine(state.lineDrawStart,id,null);state.lineDrawStart=null;_previewPos=null;hideBanner();hideLinePopover();renderAll();return}
-  state.selectedPlayer=id;state.selectedLine=null;
+  state.selectedPlayer=id;state.selectedLine=null;hideArrowPopover();
   const p=findPlayer(id);if(p){$.editPlayerNum.value=p.num;$.playerProps.classList.add('visible')}
   $.lineProps.classList.remove('visible');renderAll();showLinePopover(id);
 }
@@ -302,17 +325,68 @@ function deletePlayer(id){['home','away'].forEach(s=>{state.teams[s].players=sta
 
 function setLineType(type){state.currentLineType=type;document.querySelectorAll('.line-style-btn').forEach(b=>b.classList.toggle('active',b.dataset.type===type))}
 function createLine(fromId,toId,toPoint){const color=$.lineColor.value;const id=state.nextLineId++;state.lines.push({id,from:fromId,to:toId,toPoint,type:state.currentLineType,color});renderAll()}
-function selectLine(id){state.selectedLine=id;state.selectedPlayer=null;hideLinePopover();const l=state.lines.find(l=>l.id===id);if(l){$.editLineType.value=l.type;$.editLineColor.value=l.color;$.lineProps.classList.add('visible')}$.playerProps.classList.remove('visible');renderAll()}
+function selectLine(id){
+  state.selectedLine=id;state.selectedPlayer=null;hideLinePopover();
+  const l=state.lines.find(l=>l.id===id);
+  if(l){$.editLineType.value=l.type;$.editLineColor.value=l.color;$.lineProps.classList.add('visible')}
+  $.playerProps.classList.remove('visible');renderAll();showArrowPopover(id);
+}
 function updateSelectedLineType(){const l=state.lines.find(l=>l.id===state.selectedLine);if(l){l.type=$.editLineType.value;renderAll()}}
 function updateSelectedLineColor(){const l=state.lines.find(l=>l.id===state.selectedLine);if(l){l.color=$.editLineColor.value;renderAll()}}
-function deleteSelectedLine(){state.lines=state.lines.filter(l=>l.id!==state.selectedLine);state.selectedLine=null;$.lineProps.classList.remove('visible');renderAll()}
+function deleteSelectedLine(){state.lines=state.lines.filter(l=>l.id!==state.selectedLine);state.selectedLine=null;$.lineProps.classList.remove('visible');hideArrowPopover();renderAll()}
+
+function showArrowPopover(id){
+  const l=state.lines.find(l=>l.id===id);if(!l)return;
+  const fromP=findPlayer(l.from);if(!fromP)return;
+  const from=toPixel(fromP.x,fromP.y);
+  let to;
+  if(l.to!==null){const toP=findPlayer(l.to);if(!toP)return;to=toPixel(toP.x,toP.y)}
+  else if(l.toPoint)to=toPixel(l.toPoint.x,l.toPoint.y);else return;
+  const mx=(from.x+to.x)/2,my=(from.y+to.y)/2;
+  const s=getPitchSize();
+  const popW=168,popH=138;
+  let left=mx-popW/2;
+  let top=my-popH-10;
+  if(top<4)top=my+10;
+  left=Math.max(4,Math.min(s.w-popW-4,left));
+  $.popLineColor.value=l.color;
+  $.popTypePass.classList.toggle('active',l.type==='pass');
+  $.popTypeRun.classList.toggle('active',l.type==='run');
+  $.arrowPopover.style.left=left+'px';$.arrowPopover.style.top=top+'px';
+  $.arrowPopover.classList.add('show');
+}
+function hideArrowPopover(){$.arrowPopover.classList.remove('show')}
+
+function setPopLineType(type){
+  const l=state.lines.find(l=>l.id===state.selectedLine);if(!l)return;
+  l.type=type;$.editLineType.value=type;
+  $.popTypePass.classList.toggle('active',type==='pass');
+  $.popTypeRun.classList.toggle('active',type==='run');
+  renderLines();
+}
+function setPopLineColor(){
+  const l=state.lines.find(l=>l.id===state.selectedLine);if(!l)return;
+  l.color=$.popLineColor.value;$.editLineColor.value=$.popLineColor.value;
+  renderLines();
+}
+function deleteLineFromPopover(){hideArrowPopover();deleteSelectedLine()}
+function relocateLine(){
+  const l=state.lines.find(l=>l.id===state.selectedLine);if(!l)return;
+  const fromId=l.from;
+  state.currentLineType=l.type;$.lineColor.value=l.color;
+  state.lines=state.lines.filter(x=>x.id!==state.selectedLine);
+  state.selectedLine=null;$.lineProps.classList.remove('visible');
+  hideArrowPopover();
+  state.lineDrawStart=fromId;state.selectedPlayer=fromId;_previewPos=null;
+  showBanner();renderAll();
+}
 
 function onPitchClick(e){
   if(e.target.closest('.player'))return;
   if(e.target.closest('.line-popover'))return;
   if(state.lineDrawStart!==null){const r=$.pitchContainer.getBoundingClientRect();const norm=toNorm(e.clientX-r.left,e.clientY-r.top);createLine(state.lineDrawStart,null,norm);state.lineDrawStart=null;_previewPos=null;hideBanner();renderAll();return}
   state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;_previewPos=null;
-  $.playerProps.classList.remove('visible');$.lineProps.classList.remove('visible');hideBanner();hideLinePopover();renderAll();
+  $.playerProps.classList.remove('visible');$.lineProps.classList.remove('visible');hideBanner();hideLinePopover();hideArrowPopover();renderAll();
 }
 
 function onPlayerPointerDown(e,id){e.preventDefault();e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();const cx=e.touches?e.touches[0].clientX:e.clientX;const cy=e.touches?e.touches[0].clientY:e.clientY;state.dragging=id;state.dragOffset={x:cx-r.left-r.width/2,y:cy-r.top-r.height/2};state._dragMoved=false;state._dragStartX=cx;state._dragStartY=cy;selectPlayer(id)}
