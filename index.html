@@ -85,6 +85,8 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
 .pop-move-btn:hover{background:rgba(74,159,245,.2)!important;}
 .pop-del-btn{background:rgba(127,29,29,.4)!important;border-color:#b54a4a!important;color:#fca5a5!important;}
 .pop-del-btn:hover{background:rgba(153,27,27,.6)!important;}
+.line-handle{position:absolute;width:18px;height:18px;border-radius:50%;background:#ffd966;border:2.5px solid rgba(255,255,255,.9);cursor:grab;z-index:15;touch-action:none;box-shadow:0 0 8px rgba(255,217,102,.7);}
+.line-handle:active{cursor:grabbing;}
 </style>
 </head>
 <body>
@@ -193,7 +195,7 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
 <script>
 const PITCH_W=500,PITCH_H=700,PLAYER_R=18;
 const defaultTeam=s=>({side:s,name:s==='home'?'Squadra Casa':'Squadra Ospite',bg:s==='home'?'#1a3a6b':'#8b1a1a',txt:s==='home'?'#c0d8f0':'#f0c0c0',brd:s==='home'?'#4a7fb5':'#b54a4a',players:[],nextId:s==='home'?1:200});
-const state={teams:{home:defaultTeam('home'),away:defaultTeam('away')},activeTeam:'home',lines:[],nextLineId:1,selectedPlayer:null,selectedLine:null,lineDrawStart:null,currentLineType:'pass',dragging:null,dragOffset:{x:0,y:0},_dragMoved:false};
+const state={teams:{home:defaultTeam('home'),away:defaultTeam('away')},activeTeam:'home',lines:[],nextLineId:1,selectedPlayer:null,selectedLine:null,lineDrawStart:null,currentLineType:'pass',dragging:null,dragOffset:{x:0,y:0},_dragMoved:false,draggingLineEnd:null,_lineEndMoved:false};
 
 // --- DOM cache ---
 const $={};
@@ -412,9 +414,23 @@ document.addEventListener('pointermove',e=>{
         const n=toNorm(px,py);p.x=n.x;p.y=n.y;
         const el=$.pitchContainer.querySelector(`.player[data-id="${state.dragging}"]`);
         if(el){el.style.left=(px-PLAYER_R)+'px';el.style.top=(py-PLAYER_R)+'px';}
-        renderLines();
+        renderLines();renderLineHandles();
       }
     });
+    return;
+  }
+  if(state.draggingLineEnd!==null){
+    state._lineEndMoved=true;
+    const cr=$.pitchContainer.getBoundingClientRect();
+    const px=Math.max(0,Math.min(cr.width,e.clientX-cr.left));
+    const py=Math.max(0,Math.min(cr.height,e.clientY-cr.top));
+    const l=state.lines.find(l=>l.id===state.draggingLineEnd);
+    if(l){
+      l.to=null;l.toPoint=toNorm(px,py);
+      const handle=$.pitchContainer.querySelector('.line-handle');
+      if(handle){handle.style.left=(px-9)+'px';handle.style.top=(py-9)+'px';}
+      renderLines();
+    }
     return;
   }
   if(state.lineDrawStart!==null){
@@ -423,14 +439,31 @@ document.addEventListener('pointermove',e=>{
     _previewRafId=requestAnimationFrame(()=>{_previewRafId=null;renderLines();});
   }
 },{passive:false});
-document.addEventListener('pointerup',()=>{state.dragging=null;_lastDragE=null});
+document.addEventListener('pointerup',e=>{
+  if(state.draggingLineEnd!==null){
+    if(state._lineEndMoved){
+      const els=document.elementsFromPoint(e.clientX,e.clientY);
+      const playerEl=els.find(el=>el.classList&&el.classList.contains('player'));
+      if(playerEl){
+        const targetId=+playerEl.dataset.id;
+        const l=state.lines.find(l=>l.id===state.draggingLineEnd);
+        if(l&&targetId!==l.from){l.to=targetId;l.toPoint=null;}
+      }
+    }
+    state.draggingLineEnd=null;
+    renderAll();
+    if(state.selectedLine!==null)showArrowPopover(state.selectedLine);
+    return;
+  }
+  state.dragging=null;_lastDragE=null;
+});
 
 function onPlayerDblClick(e,id){e.preventDefault();e.stopPropagation();state.lineDrawStart=id;showBanner()}
 function showBanner(){$.drawBanner.classList.add('show')}
 function hideBanner(){$.drawBanner.classList.remove('show')}
 
 // --- Render split: pitch (campo+linee) vs UI (liste sidebar) ---
-function renderPitch(){renderPlayers();renderLines()}
+function renderPitch(){renderPlayers();renderLines();renderLineHandles()}
 function renderUI(){renderPlayerList();renderLineList()}
 function renderAll(){renderPitch();renderUI()}
 
@@ -524,6 +557,28 @@ function drawPreviewLine(){
   if(state.currentLineType==='pass')line.setAttribute('stroke-dasharray','8 6');
   line.style.pointerEvents='none';
   svg.appendChild(line);
+}
+
+function renderLineHandles(){
+  $.pitchContainer.querySelectorAll('.line-handle').forEach(el=>el.remove());
+  if(state.selectedLine===null)return;
+  const l=state.lines.find(l=>l.id===state.selectedLine);if(!l)return;
+  const fromP=findPlayer(l.from);if(!fromP)return;
+  let toPos;
+  if(l.to!==null){const toP=findPlayer(l.to);if(!toP)return;toPos=toPixel(toP.x,toP.y)}
+  else if(l.toPoint){toPos=toPixel(l.toPoint.x,l.toPoint.y)}else return;
+  const hr=9;
+  const handle=document.createElement('div');
+  handle.className='line-handle';
+  handle.style.left=(toPos.x-hr)+'px';handle.style.top=(toPos.y-hr)+'px';
+  handle.addEventListener('pointerdown',e=>onLineEndPointerDown(e,l.id));
+  $.pitchContainer.appendChild(handle);
+}
+
+function onLineEndPointerDown(e,lineId){
+  e.preventDefault();e.stopPropagation();
+  state.draggingLineEnd=lineId;state._lineEndMoved=false;
+  hideArrowPopover();
 }
 
 function renderPlayerList(){
