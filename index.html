@@ -71,6 +71,11 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
 .backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40}.backdrop.show{display:block}
 @media(max-width:768px){.sidebar{position:fixed;left:-300px;top:0;height:100vh;z-index:50;transition:left .3s;width:280px}.sidebar.open{left:0}.mobile-toggle{display:flex}}
 ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.line-popover{position:absolute;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:3px;z-index:25;box-shadow:0 4px 16px rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .12s;white-space:nowrap;}
+.line-popover.show{opacity:1;pointer-events:auto;}
+.line-popover .pop-label{font-family:'Barlow Condensed',sans-serif;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-dim);padding:2px 6px 4px;}
+.line-popover button{padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;cursor:pointer;text-align:left;transition:all .12s;}
+.line-popover button:hover{border-color:var(--accent);color:var(--accent);background:rgba(247,74,111,.08);}
 </style>
 </head>
 <body>
@@ -154,6 +159,11 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
     <svg id="linesSvg" xmlns="http://www.w3.org/2000/svg"><defs></defs></svg>
     <div id="pitchTitle">GIOCATE BASE PER LA PROFONDITÀ N.1</div>
     <div class="draw-banner" id="drawBanner">Clicca su un giocatore o punto del campo come destinazione</div>
+    <div class="line-popover" id="linePopover">
+      <div class="pop-label">Traccia linea</div>
+      <button onclick="startLine('pass')">⋯→ Passaggio</button>
+      <button onclick="startLine('run')">—→ Movimento</button>
+    </div>
   </div>
 </div>
 </div>
@@ -170,7 +180,7 @@ function initCache(){
    'playerCount','addPlayerBtn','playerProps','lineProps','drawBanner','toast',
    'mainArea','schemaTitle','tabHome','tabAway','dotHome','dotAway',
    'teamBg','teamTxt','teamBrd','teamName','colorPanelLabel',
-   'editPlayerNum','editLineType','editLineColor','lineColor','newPlayerNum','backdrop','sidebar'
+   'editPlayerNum','editLineType','editLineColor','lineColor','newPlayerNum','linePopover','backdrop','sidebar'
   ].forEach(id=>$[id]=document.getElementById(id));
 }
 
@@ -226,7 +236,7 @@ function drawPitchMarkings(){
 
 function switchTeam(side){
   state.activeTeam=side;state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;
-  $.playerProps.classList.remove('visible');$.lineProps.classList.remove('visible');hideBanner();
+  $.playerProps.classList.remove('visible');$.lineProps.classList.remove('visible');hideBanner();hideLinePopover();
   $.tabHome.className='team-tab'+(side==='home'?' active-home':'');
   $.tabAway.className='team-tab'+(side==='away'?' active-away':'');
   const t=T();
@@ -255,7 +265,7 @@ function clearTeamPlayers(){
   const t=T(),ids=new Set(t.players.map(p=>p.id));
   state.lines=state.lines.filter(l=>!ids.has(l.from)&&!ids.has(l.to));
   t.players=[];state.selectedPlayer=null;
-  $.playerProps.classList.remove('visible');
+  $.playerProps.classList.remove('visible');hideLinePopover();
   updatePlayerCount();renderAll();
 }
 
@@ -263,18 +273,36 @@ function addPlayer(){const t=T();if(t.players.length>=22)return;const num=parseI
 function updatePlayerCount(){const t=T();$.playerCount.textContent=t.players.length;$.addPlayerBtn.disabled=t.players.length>=22}
 
 function selectPlayer(id){
-  if(state.lineDrawStart!==null&&state.lineDrawStart!==id){createLine(state.lineDrawStart,id,null);state.lineDrawStart=null;hideBanner();renderAll();return}
+  if(state.lineDrawStart!==null&&state.lineDrawStart!==id){createLine(state.lineDrawStart,id,null);state.lineDrawStart=null;hideBanner();hideLinePopover();renderAll();return}
   state.selectedPlayer=id;state.selectedLine=null;
   const p=findPlayer(id);if(p){$.editPlayerNum.value=p.num;$.playerProps.classList.add('visible')}
-  $.lineProps.classList.remove('visible');renderAll();
+  $.lineProps.classList.remove('visible');renderAll();showLinePopover(id);
+}
+
+function showLinePopover(id){
+  const p=findPlayer(id);if(!p)return;
+  const pos=toPixel(p.x,p.y);
+  const s=getPitchSize();
+  const popW=148,popH=78;
+  let left=pos.x-popW/2;
+  let top=pos.y-PLAYER_R-popH-10;
+  if(top<4)top=pos.y+PLAYER_R+10;
+  left=Math.max(4,Math.min(s.w-popW-4,left));
+  $.linePopover.style.left=left+'px';$.linePopover.style.top=top+'px';
+  $.linePopover.classList.add('show');
+}
+function hideLinePopover(){$.linePopover.classList.remove('show')}
+function startLine(type){
+  state.currentLineType=type;state.lineDrawStart=state.selectedPlayer;
+  hideLinePopover();showBanner();renderPlayers();
 }
 
 function updateSelectedPlayerNum(){const p=findPlayer(state.selectedPlayer);if(p){p.num=parseInt($.editPlayerNum.value)||1;renderAll()}}
-function deletePlayer(id){['home','away'].forEach(s=>{state.teams[s].players=state.teams[s].players.filter(p=>p.id!==id)});state.lines=state.lines.filter(l=>l.from!==id&&l.to!==id);if(state.selectedPlayer===id){state.selectedPlayer=null;$.playerProps.classList.remove('visible')}updatePlayerCount();renderAll()}
+function deletePlayer(id){['home','away'].forEach(s=>{state.teams[s].players=state.teams[s].players.filter(p=>p.id!==id)});state.lines=state.lines.filter(l=>l.from!==id&&l.to!==id);if(state.selectedPlayer===id){state.selectedPlayer=null;$.playerProps.classList.remove('visible');hideLinePopover()}updatePlayerCount();renderAll()}
 
 function setLineType(type){state.currentLineType=type;document.querySelectorAll('.line-style-btn').forEach(b=>b.classList.toggle('active',b.dataset.type===type))}
 function createLine(fromId,toId,toPoint){const color=$.lineColor.value;const id=state.nextLineId++;state.lines.push({id,from:fromId,to:toId,toPoint,type:state.currentLineType,color});renderAll()}
-function selectLine(id){state.selectedLine=id;state.selectedPlayer=null;const l=state.lines.find(l=>l.id===id);if(l){$.editLineType.value=l.type;$.editLineColor.value=l.color;$.lineProps.classList.add('visible')}$.playerProps.classList.remove('visible');renderAll()}
+function selectLine(id){state.selectedLine=id;state.selectedPlayer=null;hideLinePopover();const l=state.lines.find(l=>l.id===id);if(l){$.editLineType.value=l.type;$.editLineColor.value=l.color;$.lineProps.classList.add('visible')}$.playerProps.classList.remove('visible');renderAll()}
 function updateSelectedLineType(){const l=state.lines.find(l=>l.id===state.selectedLine);if(l){l.type=$.editLineType.value;renderAll()}}
 function updateSelectedLineColor(){const l=state.lines.find(l=>l.id===state.selectedLine);if(l){l.color=$.editLineColor.value;renderAll()}}
 function deleteSelectedLine(){state.lines=state.lines.filter(l=>l.id!==state.selectedLine);state.selectedLine=null;$.lineProps.classList.remove('visible');renderAll()}
@@ -283,7 +311,7 @@ function onPitchClick(e){
   if(e.target.closest('.player'))return;
   if(state.lineDrawStart!==null){const r=$.pitchContainer.getBoundingClientRect();const norm=toNorm(e.clientX-r.left,e.clientY-r.top);createLine(state.lineDrawStart,null,norm);state.lineDrawStart=null;hideBanner();renderAll();return}
   state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;
-  $.playerProps.classList.remove('visible');$.lineProps.classList.remove('visible');hideBanner();renderAll();
+  $.playerProps.classList.remove('visible');$.lineProps.classList.remove('visible');hideBanner();hideLinePopover();renderAll();
 }
 
 function onPlayerPointerDown(e,id){e.preventDefault();e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();const cx=e.touches?e.touches[0].clientX:e.clientX;const cy=e.touches?e.touches[0].clientY:e.clientY;state.dragging=id;state.dragOffset={x:cx-r.left-r.width/2,y:cy-r.top-r.height/2};state._dragMoved=false;state._dragStartX=cx;state._dragStartY=cy;selectPlayer(id)}
@@ -299,7 +327,7 @@ document.addEventListener('pointermove',e=>{
     _dragRafId=null;
     const ev=_lastDragE;
     const dx=ev.clientX-state._dragStartX,dy=ev.clientY-state._dragStartY;
-    if(Math.abs(dx)>3||Math.abs(dy)>3)state._dragMoved=true;
+    if(Math.abs(dx)>3||Math.abs(dy)>3){state._dragMoved=true;hideLinePopover();}
     if(!state._dragMoved)return;
     const cr=$.pitchContainer.getBoundingClientRect();
     const px=Math.max(PLAYER_R,Math.min(cr.width-PLAYER_R,ev.clientX-cr.left));
