@@ -91,6 +91,9 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
 .line-cp-handle:active{cursor:grabbing;}
 .number-input{width:100%;background:transparent;border:none;outline:none;text-align:center;color:inherit;font-family:'Bebas Neue',sans-serif;font-size:14px;padding:0;margin:0;cursor:text;-moz-appearance:textfield;}
 .number-input::-webkit-outer-spin-button,.number-input::-webkit-inner-spin-button{-webkit-appearance:none;}
+.ball{position:absolute;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:grab;z-index:11;user-select:none;-webkit-user-select:none;touch-action:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));}
+.ball:active{cursor:grabbing;}
+#ballBtn.active{border-color:var(--accent);color:var(--accent);}
 #ghFooter{position:fixed;bottom:8px;right:12px;display:flex;align-items:center;gap:5px;color:rgba(255,255,255,.28);text-decoration:none;font-family:'Barlow',sans-serif;font-size:.62rem;letter-spacing:.5px;z-index:50;transition:color .2s;}
 #ghFooter:hover{color:rgba(255,255,255,.75);}
 #ghFooter svg{width:13px;height:13px;fill:currentColor;flex-shrink:0;}
@@ -128,7 +131,10 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
       <button class="formation-btn" onclick="applyFormation('4-3-1-2')">4-3-1-2</button>
       <button class="formation-btn" onclick="applyFormation('3-4-3')">3-4-3</button>
     </div>
-    <div style="margin-top:6px"><button class="btn btn-outline btn-sm btn-full" onclick="clearTeamPlayers()">Rimuovi giocatori squadra</button></div>
+    <div style="margin-top:6px;display:flex;gap:5px">
+      <button class="btn btn-outline btn-sm" style="flex:1" onclick="clearTeamPlayers()">Rimuovi giocatori</button>
+      <button class="btn btn-outline btn-sm" id="ballBtn" onclick="toggleBall()" style="min-width:38px">⚽</button>
+    </div>
   </div>
   <div class="panel">
     <div class="panel-title">Giocatori (<span id="playerCount">0</span>/22)</div>
@@ -207,7 +213,7 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
 <script>
 const PITCH_W=500,PITCH_H=700,PLAYER_R=18;
 const defaultTeam=s=>({side:s,name:s==='home'?'Squadra Casa':'Squadra Ospite',bg:s==='home'?'#1a3a6b':'#8b1a1a',txt:s==='home'?'#c0d8f0':'#f0c0c0',brd:s==='home'?'#4a7fb5':'#b54a4a',players:[],nextId:s==='home'?1:200});
-const state={teams:{home:defaultTeam('home'),away:defaultTeam('away')},activeTeam:'home',lines:[],nextLineId:1,selectedPlayer:null,selectedLine:null,lineDrawStart:null,currentLineType:'pass',dragging:null,dragOffset:{x:0,y:0},_dragMoved:false,draggingLineEnd:null,_lineEndMoved:false,draggingLineCp:null};
+const state={teams:{home:defaultTeam('home'),away:defaultTeam('away')},activeTeam:'home',lines:[],nextLineId:1,selectedPlayer:null,selectedLine:null,lineDrawStart:null,currentLineType:'pass',dragging:null,dragOffset:{x:0,y:0},_dragMoved:false,draggingLineEnd:null,_lineEndMoved:false,draggingLineCp:null,ball:null,draggingBall:false};
 
 // --- DOM cache ---
 const $={};
@@ -217,7 +223,7 @@ function initCache(){
    'mainArea','schemaTitle','tabHome','tabAway','dotHome','dotAway',
    'teamBg','teamTxt','teamBrd','teamName','colorPanelLabel',
    'editPlayerNum','editLineType','editLineColor','lineColor','newPlayerNum','linePopover','arrowPopover',
-   'popTypePass','popTypeRun','popLineColor','backdrop','sidebar'
+   'popTypePass','popTypeRun','popLineColor','ballBtn','backdrop','sidebar'
   ].forEach(id=>$[id]=document.getElementById(id));
 }
 
@@ -407,6 +413,15 @@ document.addEventListener('pointermove',e=>{
     });
     return;
   }
+  if(state.draggingBall){
+    const cr=$.pitchContainer.getBoundingClientRect();
+    const px=Math.max(BALL_R,Math.min(cr.width-BALL_R,e.clientX-cr.left));
+    const py=Math.max(BALL_R,Math.min(cr.height-BALL_R,e.clientY-cr.top));
+    state.ball=toNorm(px,py);
+    const el=$.pitchContainer.querySelector('.ball');
+    if(el){el.style.left=(px-BALL_R)+'px';el.style.top=(py-BALL_R)+'px';}
+    return;
+  }
   if(state.draggingLineCp!==null){
     const cr=$.pitchContainer.getBoundingClientRect();
     const px=Math.max(0,Math.min(cr.width,e.clientX-cr.left));
@@ -441,6 +456,7 @@ document.addEventListener('pointermove',e=>{
   }
 },{passive:false});
 document.addEventListener('pointerup',e=>{
+  if(state.draggingBall){state.draggingBall=false;return;}
   if(state.draggingLineCp!==null){
     state.draggingLineCp=null;
     renderAll();
@@ -486,11 +502,32 @@ function startNumberEdit(playerId){
   input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur();}});
   input.addEventListener('pointerdown',e=>e.stopPropagation());
 }
+const BALL_R=16;
+function renderBall(){
+  $.pitchContainer.querySelectorAll('.ball').forEach(el=>el.remove());
+  if(!state.ball)return;
+  const pos=toPixel(state.ball.x,state.ball.y);
+  const div=document.createElement('div');
+  div.className='ball';div.textContent='⚽';
+  div.style.left=(pos.x-BALL_R)+'px';div.style.top=(pos.y-BALL_R)+'px';
+  div.addEventListener('pointerdown',onBallPointerDown);
+  $.pitchContainer.appendChild(div);
+}
+function toggleBall(){
+  state.ball=state.ball?null:{x:.5,y:.5};
+  $.ballBtn.classList.toggle('active',!!state.ball);
+  renderBall();
+}
+function onBallPointerDown(e){
+  e.preventDefault();e.stopPropagation();
+  state.draggingBall=true;
+}
+
 function showBanner(){$.drawBanner.classList.add('show')}
 function hideBanner(){$.drawBanner.classList.remove('show')}
 
 // --- Render split: pitch (campo+linee) vs UI (liste sidebar) ---
-function renderPitch(){renderPlayers();renderLines();renderLineHandles()}
+function renderPitch(){renderPlayers();renderLines();renderLineHandles();renderBall()}
 function renderUI(){renderPlayerList();renderLineList()}
 function renderAll(){renderPitch();renderUI()}
 
@@ -667,11 +704,11 @@ async function exportPDF(){showToast('Generazione PDF...');try{const c=await htm
   pdf.link(ghX-1,ghY-3.5,ghW+2,5,{url:ghUrl});
   pdf.save('schema-tattico.pdf');showToast('PDF scaricato!')}catch(e){showToast('Errore: '+e.message)}}
 
-function saveSchema(){const data={title:$.schemaTitle.value,teams:state.teams,lines:state.lines};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.download='schema-tattico.json';a.href=URL.createObjectURL(blob);a.click();showToast('Schema salvato!')}
+function saveSchema(){const data={title:$.schemaTitle.value,teams:state.teams,lines:state.lines,ball:state.ball};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.download='schema-tattico.json';a.href=URL.createObjectURL(blob);a.click();showToast('Schema salvato!')}
 
-function loadSchema(event){const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const d=JSON.parse(e.target.result);$.schemaTitle.value=d.title||'';updateTitle();state.teams=d.teams||{home:defaultTeam('home'),away:defaultTeam('away')};state.lines=(d.lines||[]).map(l=>({...l,cp:l.cp||null}));['home','away'].forEach(s=>{state.teams[s].nextId=Math.max(...state.teams[s].players.map(p=>p.id),0)+1});state.nextLineId=Math.max(...state.lines.map(l=>l.id),0)+1;state.selectedPlayer=null;state.selectedLine=null;switchTeam('home');showToast('Schema caricato!')}catch(err){showToast('Errore nel file')}};reader.readAsText(file);event.target.value=''}
+function loadSchema(event){const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const d=JSON.parse(e.target.result);$.schemaTitle.value=d.title||'';updateTitle();state.teams=d.teams||{home:defaultTeam('home'),away:defaultTeam('away')};state.lines=(d.lines||[]).map(l=>({...l,cp:l.cp||null}));['home','away'].forEach(s=>{state.teams[s].nextId=Math.max(...state.teams[s].players.map(p=>p.id),0)+1});state.nextLineId=Math.max(...state.lines.map(l=>l.id),0)+1;state.ball=d.ball||null;$.ballBtn.classList.toggle('active',!!state.ball);state.selectedPlayer=null;state.selectedLine=null;switchTeam('home');showToast('Schema caricato!')}catch(err){showToast('Errore nel file')}};reader.readAsText(file);event.target.value=''}
 
-function resetAll(){if(!confirm('Resettare tutto?'))return;state.teams={home:defaultTeam('home'),away:defaultTeam('away')};state.lines=[];state.nextLineId=1;state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;state.draggingLineCp=null;state.draggingLineEnd=null;$.schemaTitle.value='Schema tattico';updateTitle();switchTeam('home');renderAll();showToast('Reset completato')}
+function resetAll(){if(!confirm('Resettare tutto?'))return;state.teams={home:defaultTeam('home'),away:defaultTeam('away')};state.lines=[];state.nextLineId=1;state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;state.draggingLineCp=null;state.draggingLineEnd=null;state.ball=null;$.ballBtn.classList.remove('active');$.schemaTitle.value='Schema tattico';updateTitle();switchTeam('home');renderAll();showToast('Reset completato')}
 
 function showToast(msg){$.toast.textContent=msg;$.toast.classList.add('show');setTimeout(()=>$.toast.classList.remove('show'),2200)}
 function toggleSidebar(){$.sidebar.classList.toggle('open');$.backdrop.classList.toggle('show')}
