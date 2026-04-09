@@ -273,7 +273,7 @@ function addPlayer(){const t=T();if(t.players.length>=22)return;const num=parseI
 function updatePlayerCount(){const t=T();$.playerCount.textContent=t.players.length;$.addPlayerBtn.disabled=t.players.length>=22}
 
 function selectPlayer(id){
-  if(state.lineDrawStart!==null&&state.lineDrawStart!==id){createLine(state.lineDrawStart,id,null);state.lineDrawStart=null;hideBanner();hideLinePopover();renderAll();return}
+  if(state.lineDrawStart!==null&&state.lineDrawStart!==id){createLine(state.lineDrawStart,id,null);state.lineDrawStart=null;_previewPos=null;hideBanner();hideLinePopover();renderAll();return}
   state.selectedPlayer=id;state.selectedLine=null;
   const p=findPlayer(id);if(p){$.editPlayerNum.value=p.num;$.playerProps.classList.add('visible')}
   $.lineProps.classList.remove('visible');renderAll();showLinePopover(id);
@@ -309,37 +309,45 @@ function deleteSelectedLine(){state.lines=state.lines.filter(l=>l.id!==state.sel
 
 function onPitchClick(e){
   if(e.target.closest('.player'))return;
-  if(state.lineDrawStart!==null){const r=$.pitchContainer.getBoundingClientRect();const norm=toNorm(e.clientX-r.left,e.clientY-r.top);createLine(state.lineDrawStart,null,norm);state.lineDrawStart=null;hideBanner();renderAll();return}
-  state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;
+  if(e.target.closest('.line-popover'))return;
+  if(state.lineDrawStart!==null){const r=$.pitchContainer.getBoundingClientRect();const norm=toNorm(e.clientX-r.left,e.clientY-r.top);createLine(state.lineDrawStart,null,norm);state.lineDrawStart=null;_previewPos=null;hideBanner();renderAll();return}
+  state.selectedPlayer=null;state.selectedLine=null;state.lineDrawStart=null;_previewPos=null;
   $.playerProps.classList.remove('visible');$.lineProps.classList.remove('visible');hideBanner();hideLinePopover();renderAll();
 }
 
 function onPlayerPointerDown(e,id){e.preventDefault();e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();const cx=e.touches?e.touches[0].clientX:e.clientX;const cy=e.touches?e.touches[0].clientY:e.clientY;state.dragging=id;state.dragOffset={x:cx-r.left-r.width/2,y:cy-r.top-r.height/2};state._dragMoved=false;state._dragStartX=cx;state._dragStartY=cy;selectPlayer(id)}
 
-// --- RAF-throttled drag: aggiorna solo il giocatore mosso + linee SVG ---
-let _dragRafId=null,_lastDragE=null;
+// --- RAF-throttled drag + preview linea ---
+let _dragRafId=null,_lastDragE=null,_previewPos=null,_previewRafId=null;
 document.addEventListener('pointermove',e=>{
-  if(state.dragging===null)return;
-  e.preventDefault();
-  _lastDragE=e;
-  if(_dragRafId)return;
-  _dragRafId=requestAnimationFrame(()=>{
-    _dragRafId=null;
-    const ev=_lastDragE;
-    const dx=ev.clientX-state._dragStartX,dy=ev.clientY-state._dragStartY;
-    if(Math.abs(dx)>3||Math.abs(dy)>3){state._dragMoved=true;hideLinePopover();}
-    if(!state._dragMoved)return;
-    const cr=$.pitchContainer.getBoundingClientRect();
-    const px=Math.max(PLAYER_R,Math.min(cr.width-PLAYER_R,ev.clientX-cr.left));
-    const py=Math.max(PLAYER_R,Math.min(cr.height-PLAYER_R,ev.clientY-cr.top));
-    const p=findPlayer(state.dragging);
-    if(p){
-      const n=toNorm(px,py);p.x=n.x;p.y=n.y;
-      const el=$.pitchContainer.querySelector(`.player[data-id="${state.dragging}"]`);
-      if(el){el.style.left=(px-PLAYER_R)+'px';el.style.top=(py-PLAYER_R)+'px';}
-      renderLines();
-    }
-  });
+  if(state.dragging!==null){
+    e.preventDefault();
+    _lastDragE=e;
+    if(_dragRafId)return;
+    _dragRafId=requestAnimationFrame(()=>{
+      _dragRafId=null;
+      const ev=_lastDragE;
+      const dx=ev.clientX-state._dragStartX,dy=ev.clientY-state._dragStartY;
+      if(Math.abs(dx)>3||Math.abs(dy)>3){state._dragMoved=true;hideLinePopover();}
+      if(!state._dragMoved)return;
+      const cr=$.pitchContainer.getBoundingClientRect();
+      const px=Math.max(PLAYER_R,Math.min(cr.width-PLAYER_R,ev.clientX-cr.left));
+      const py=Math.max(PLAYER_R,Math.min(cr.height-PLAYER_R,ev.clientY-cr.top));
+      const p=findPlayer(state.dragging);
+      if(p){
+        const n=toNorm(px,py);p.x=n.x;p.y=n.y;
+        const el=$.pitchContainer.querySelector(`.player[data-id="${state.dragging}"]`);
+        if(el){el.style.left=(px-PLAYER_R)+'px';el.style.top=(py-PLAYER_R)+'px';}
+        renderLines();
+      }
+    });
+    return;
+  }
+  if(state.lineDrawStart!==null){
+    _previewPos={x:e.clientX,y:e.clientY};
+    if(_previewRafId)return;
+    _previewRafId=requestAnimationFrame(()=>{_previewRafId=null;renderLines();});
+  }
 },{passive:false});
 document.addEventListener('pointerup',()=>{state.dragging=null;_lastDragE=null});
 
@@ -414,6 +422,34 @@ function renderLines(){
     line.addEventListener('click',e=>{e.stopPropagation();selectLine(l.id)});
     svg.appendChild(line);
   });
+  drawPreviewLine();
+}
+
+function drawPreviewLine(){
+  if(!_previewPos||!state.lineDrawStart)return;
+  const fromP=findPlayer(state.lineDrawStart);if(!fromP)return;
+  const cr=$.pitchContainer.getBoundingClientRect();
+  const from=toPixel(fromP.x,fromP.y);
+  const to={x:_previewPos.x-cr.left,y:_previewPos.y-cr.top};
+  const dx=to.x-from.x,dy=to.y-from.y,dist=Math.sqrt(dx*dx+dy*dy);
+  const so=PLAYER_R+4;
+  if(dist<so+5)return;
+  const sx=from.x+(dx/dist)*so,sy=from.y+(dy/dist)*so;
+  const color=$.lineColor.value;
+  const svg=$.linesSvg,defs=svg.querySelector('defs');
+  const marker=document.createElementNS('http://www.w3.org/2000/svg','marker');
+  marker.setAttribute('id','arrow-preview');marker.setAttribute('markerWidth','10');marker.setAttribute('markerHeight','8');
+  marker.setAttribute('refX','9');marker.setAttribute('refY','4');marker.setAttribute('orient','auto');
+  const mp=document.createElementNS('http://www.w3.org/2000/svg','path');
+  mp.setAttribute('d','M0,0 L10,4 L0,8 Z');mp.setAttribute('fill',color);mp.setAttribute('opacity','0.6');
+  marker.appendChild(mp);defs.appendChild(marker);
+  const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+  line.setAttribute('x1',sx);line.setAttribute('y1',sy);line.setAttribute('x2',to.x);line.setAttribute('y2',to.y);
+  line.setAttribute('stroke',color);line.setAttribute('stroke-width',state.currentLineType==='run'?'3.5':'2.5');
+  line.setAttribute('stroke-opacity','0.55');line.setAttribute('marker-end','url(#arrow-preview)');
+  if(state.currentLineType==='pass')line.setAttribute('stroke-dasharray','8 6');
+  line.style.pointerEvents='none';
+  svg.appendChild(line);
 }
 
 function renderPlayerList(){
