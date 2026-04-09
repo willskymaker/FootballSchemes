@@ -368,11 +368,15 @@ function showArrowPopover(id){
   // punto medio sulla curva bezier (t=0.5)
   const mx=0.25*from.x+0.5*cp.x+0.25*to.x,my=0.25*from.y+0.5*cp.y+0.25*to.y;
   const s=getPitchSize();
-  const popW=168,popH=138;
-  let left=mx-popW/2;
-  let top=my-popH-10;
-  if(top<4)top=my+10;
+  const popW=168,popH=108;
+  // offset perpendicolare alla linea per non coprire gli handle
+  const ldx=to.x-from.x,ldy=to.y-from.y,llen=Math.sqrt(ldx*ldx+ldy*ldy)||1;
+  const perpX=-ldy/llen,perpY=ldx/llen;
+  const offDist=58;
+  let left=mx+perpX*offDist-popW/2;
+  let top=my+perpY*offDist-popH/2;
   left=Math.max(4,Math.min(s.w-popW-4,left));
+  top=Math.max(4,Math.min(s.h-popH-4,top));
   $.popLineColor.value=l.color;
   $.popTypePass.classList.toggle('active',l.type==='pass');
   $.popTypeRun.classList.toggle('active',l.type==='run');
