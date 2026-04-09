@@ -75,7 +75,7 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
 .line-popover.show{opacity:1;pointer-events:auto;}
 .line-popover .pop-label{font-family:'Barlow Condensed',sans-serif;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-dim);padding:2px 6px 4px;}
 .pop-label:active{cursor:default;}
-#arrowPopover{position:fixed;bottom:34px;right:12px;z-index:100;}
+#arrowPopover,#linePopover{position:fixed;bottom:34px;right:12px;z-index:100;}
 .line-popover button{padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;cursor:pointer;text-align:left;transition:all .12s;}
 .line-popover button:hover{border-color:var(--accent);color:var(--accent);background:rgba(247,74,111,.08);}
 .pop-type-row{display:flex;gap:3px;}
@@ -178,12 +178,12 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
     <svg id="linesSvg" xmlns="http://www.w3.org/2000/svg"><defs></defs></svg>
     <div id="pitchTitle">GIOCATE BASE PER LA PROFONDITÀ N.1</div>
     <div class="draw-banner" id="drawBanner">Clicca su un giocatore o punto del campo come destinazione</div>
-    <div class="line-popover" id="linePopover">
-      <div class="pop-label">Traccia linea</div>
-      <button onclick="startLine('pass')">⋯→ Passaggio</button>
-      <button onclick="startLine('run')">—→ Movimento</button>
-    </div>
   </div>
+</div>
+<div class="line-popover" id="linePopover">
+  <div class="pop-label">Traccia linea</div>
+  <button onclick="startLine('pass')">⋯→ Passaggio</button>
+  <button onclick="startLine('run')">—→ Movimento</button>
 </div>
 <div class="line-popover" id="arrowPopover">
   <div class="pop-label">Modifica linea</div>
@@ -313,21 +313,10 @@ function selectPlayer(id){
   if(state.lineDrawStart!==null&&state.lineDrawStart!==id){createLine(state.lineDrawStart,id,null);state.lineDrawStart=null;_previewPos=null;hideBanner();hideLinePopover();renderAll();return}
   state.selectedPlayer=id;state.selectedLine=null;hideArrowPopover();
   const p=findPlayer(id);if(p){$.editPlayerNum.value=p.num;$.playerProps.classList.add('visible')}
-  $.lineProps.classList.remove('visible');renderAll();showLinePopover(id);
+  $.lineProps.classList.remove('visible');renderAll();showLinePopover();
 }
 
-function showLinePopover(id){
-  const p=findPlayer(id);if(!p)return;
-  const pos=toPixel(p.x,p.y);
-  const s=getPitchSize();
-  const popW=148,popH=78;
-  let left=pos.x-popW/2;
-  let top=pos.y-PLAYER_R-popH-10;
-  if(top<4)top=pos.y+PLAYER_R+10;
-  left=Math.max(4,Math.min(s.w-popW-4,left));
-  $.linePopover.style.left=left+'px';$.linePopover.style.top=top+'px';
-  $.linePopover.classList.add('show');
-}
+function showLinePopover(){$.linePopover.classList.add('show')}
 function hideLinePopover(){$.linePopover.classList.remove('show')}
 function startLine(type){
   state.currentLineType=type;state.lineDrawStart=state.selectedPlayer;
