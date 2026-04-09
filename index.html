@@ -73,7 +73,8 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
 ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 .line-popover{position:absolute;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:3px;z-index:25;box-shadow:0 4px 16px rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .12s;white-space:nowrap;}
 .line-popover.show{opacity:1;pointer-events:auto;}
-.line-popover .pop-label{font-family:'Barlow Condensed',sans-serif;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-dim);padding:2px 6px 4px;}
+.line-popover .pop-label{font-family:'Barlow Condensed',sans-serif;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-dim);padding:2px 6px 4px;cursor:grab;user-select:none;}
+.pop-label:active{cursor:grabbing;}
 .line-popover button{padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:1px;cursor:pointer;text-align:left;transition:all .12s;}
 .line-popover button:hover{border-color:var(--accent);color:var(--accent);background:rgba(247,74,111,.08);}
 .pop-type-row{display:flex;gap:3px;}
@@ -230,6 +231,7 @@ const F={'4-4-2':[{n:1,x:.5,y:.92},{n:2,x:.85,y:.78},{n:5,x:.65,y:.8},{n:6,x:.35
 let _resizeTimer;
 window.addEventListener('load',()=>{
   initCache();
+  setupPopoverDrag();
   sizePitch();drawPitchMarkings();switchTeam('home');renderAll();
   $.pitchContainer.addEventListener('click',onPitchClick);
   window.addEventListener('resize',()=>{
@@ -384,6 +386,27 @@ function showArrowPopover(id){
   $.arrowPopover.classList.add('show');
 }
 function hideArrowPopover(){$.arrowPopover.classList.remove('show')}
+
+function setupPopoverDrag(){
+  let dragging=false,ox=0,oy=0;
+  const label=$.arrowPopover.querySelector('.pop-label');
+  label.addEventListener('pointerdown',e=>{
+    e.stopPropagation();e.preventDefault();
+    dragging=true;
+    const r=$.arrowPopover.getBoundingClientRect();
+    const cr=$.pitchContainer.getBoundingClientRect();
+    ox=e.clientX-(r.left-cr.left);oy=e.clientY-(r.top-cr.top);
+    $.arrowPopover.setPointerCapture(e.pointerId);
+  });
+  $.arrowPopover.addEventListener('pointermove',e=>{
+    if(!dragging)return;e.stopPropagation();
+    const cr=$.pitchContainer.getBoundingClientRect(),s=getPitchSize();
+    const l=Math.max(0,Math.min(s.w-$.arrowPopover.offsetWidth,e.clientX-cr.left-ox));
+    const t=Math.max(0,Math.min(s.h-$.arrowPopover.offsetHeight,e.clientY-cr.top-oy));
+    $.arrowPopover.style.left=l+'px';$.arrowPopover.style.top=t+'px';
+  });
+  $.arrowPopover.addEventListener('pointerup',()=>{dragging=false});
+}
 
 function setPopLineType(type){
   const l=state.lines.find(l=>l.id===state.selectedLine);if(!l)return;
