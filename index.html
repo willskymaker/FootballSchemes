@@ -87,6 +87,8 @@ input[type="color"]{width:28px;height:28px;border:1px solid var(--border);border
 .line-handle:active{cursor:grabbing;}
 .line-cp-handle{position:absolute;width:12px;height:12px;border-radius:50%;background:var(--accent);border:2px solid rgba(255,255,255,.8);cursor:grab;z-index:15;touch-action:none;box-shadow:0 0 6px rgba(247,74,111,.5);}
 .line-cp-handle:active{cursor:grabbing;}
+.number-input{width:100%;background:transparent;border:none;outline:none;text-align:center;color:inherit;font-family:'Bebas Neue',sans-serif;font-size:14px;padding:0;margin:0;cursor:text;-moz-appearance:textfield;}
+.number-input::-webkit-outer-spin-button,.number-input::-webkit-inner-spin-button{-webkit-appearance:none;}
 #ghFooter{position:fixed;bottom:8px;right:12px;display:flex;align-items:center;gap:5px;color:rgba(255,255,255,.28);text-decoration:none;font-family:'Barlow',sans-serif;font-size:.62rem;letter-spacing:.5px;z-index:50;transition:color .2s;}
 #ghFooter:hover{color:rgba(255,255,255,.75);}
 #ghFooter svg{width:13px;height:13px;fill:currentColor;flex-shrink:0;}
@@ -487,7 +489,27 @@ document.addEventListener('pointerup',e=>{
   state.dragging=null;_lastDragE=null;
 });
 
-function onPlayerDblClick(e,id){e.preventDefault();e.stopPropagation();state.lineDrawStart=id;showBanner()}
+function onPlayerDblClick(e,id){e.preventDefault();e.stopPropagation();startNumberEdit(id)}
+
+function startNumberEdit(playerId){
+  const p=findPlayer(playerId);if(!p)return;
+  const div=$.pitchContainer.querySelector(`.player[data-id="${playerId}"]`);if(!div)return;
+  const span=div.querySelector('.number');if(!span||div.querySelector('.number-input'))return;
+  const input=document.createElement('input');
+  input.type='number';input.className='number-input';input.min=1;input.max=99;input.value=p.num;
+  span.replaceWith(input);
+  input.focus();input.select();
+  const save=()=>{
+    const v=parseInt(input.value);
+    if(v>=1&&v<=99){p.num=v;$.editPlayerNum.value=v;}
+    const s=document.createElement('span');s.className='number';
+    input.replaceWith(s);
+    renderAll();
+  };
+  input.addEventListener('blur',save);
+  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur();}});
+  input.addEventListener('pointerdown',e=>e.stopPropagation());
+}
 function showBanner(){$.drawBanner.classList.add('show')}
 function hideBanner(){$.drawBanner.classList.remove('show')}
 
@@ -522,7 +544,7 @@ function renderPlayers(){
     div.className=cls;
     div.style.left=(pos.x-PLAYER_R)+'px';div.style.top=(pos.y-PLAYER_R)+'px';
     div.style.backgroundColor=team.bg;div.style.color=team.txt;div.style.borderColor=team.brd;
-    div.querySelector('.number').textContent=p.num;
+    const numSpan=div.querySelector('.number');if(numSpan)numSpan.textContent=p.num;
   });
   existing.forEach(el=>el.remove());
 }
